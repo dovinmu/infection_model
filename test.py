@@ -18,4 +18,4 @@ print('got all connected graphs.')
 #limitedInfection(n_users-1, graphs, allow_over=False)
 
 #exact limited infection
-limitedInfectionExactLocal(n_users-100, graphs)
+limitedInfectionExactLocal(n_users-100, graphs, render=True)

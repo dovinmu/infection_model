@@ -173,15 +173,31 @@ def totalInfection(patientZero, new_version=2.0, render=True, node_positions=Non
 
 def limitedInfection(target, graphs, new_version=2.0, render=True, allow_over=True, node_positions=None):
     '''
-    For the first variation of this algorithm, let's guarantee that a mentor-student relationship will not be divided into the updated and nonupdated. This seems reasonable, as even classroom sizes grow statistically small as our user space grows. If our target is to update 100 users, then a difference of 15 users in either direction is noticeable but still probably fine and worth keeping the user experience consistent in that classroom. If our target is to update 1000 or 10000 students then a difference of that amount becomes statistically insignificant.
+    Update a number of users as close as possible to the target without breaking connected graphs into updated / not updated.
 
-    If we don't allow any breaks, then we just want to minimize the difference from the target. So we will update all the singletons first, and then progressively update larger and larger networks until we reach the target, going either over or under it depending on which gets us closer.
+    target: the number of users to update
+    graphs: an array of tuples returned from getAllConnectedGraphs, of the form (arbitrary node inside the connected graph, number of nodes in that graph) and sorted by the second value from lowest to highest.
+    allow_over: if True, allow the number of users updated to exceed the target.
+    node_positions: physical layout of the nodes for rendering
     '''
     if render and not node_positions:
         node_positions = nx.spring_layout(G,dim=2,k=.1)
-
+    #remove any networks that are larger than our target
+    while graphs[-1][1] > (target - len(updated_users)):
+        graphs.pop()
+    #update the most-connected graphs until we can't fit anymore
+    while graphs[-1][1] < (target - len(updated_users)):
+        graph = graphs.pop()
+        totalInfection(graph[0], render=render, node_positions=node_positions)
+        if render:
+            renderGraph(node_positions)
+        print('infected: {}'.format(len(updated_users)))
+    if len(updated_users) == target:
+        return
+    #then try updating the least-connected graphs until we finish or can't fit anymore
     to_update = []
     update_count = 0
+    target = target-len(updated_users)
     for graph in graphs:
         if update_count + graph[1] > target:
             if allow_over and abs(target - update_count - graph[1]) < abs(target - update_count):
@@ -195,88 +211,22 @@ def limitedInfection(target, graphs, new_version=2.0, render=True, allow_over=Tr
         totalInfection(user, node_positions=node_positions, render=render)
         #print('infected: {}, uninfected: {}'.format(len(updated_users), len(nonupdated_users)))
 
-def limitedInfectionExact(target, graphs, new_version=2.0, render=True):
-    '''
-    NOTE TO THE READER: this algorithm works, but it doens't work as well as it should and is being left in to be improved later. Also code is pretty janky.
 
-    For an exact limited infection, we'll allow for some discontinuities in versions between students and mentors. But we still don't really like it, so we want to minimize this happening. We can measure this by how many edges exist at the end of the algorithm between nodes with different versions, and say that the goal of the algorithm is to minimize that number.
-
-    A fully general and perfect solution would need to rely on graph partitioning, which is NP-hard. I think that's a problem for another day. Instead, let's try to get a decent approximation.
-
-    We'll run the limitedInfection algorithm, which will infect graphs starting at the smallest until all the graphs left would make us go over our target, increasing our error. Then, we using the idea of linked lists, we'll collect "sparse chains" of nodes in the graphs that have few neighbors.
-
-    NOTE: unfortunately, though the idea is a good one, this algorithm doesn't prioritize updating neighbor nodes all at once, and haphazardly jumps all over the place. Also the code is kinda gnarly and hard to read.
-    '''
-    if render:
-        node_positions = nx.spring_layout(G,dim=2,k=.1)
-    #run limited infection and stay under target
-    limitedInfection(target, graphs, allow_over=False, new_version=new_version, render=False)
-    #remove updated graphs
-    noninfected_graphs = []
-    print('the following graphs are still noninfected:')
-    for graph in graphs:
-        if graph[0].version < new_version:
-            nodeset = getConnectedGraph(graph[0])
-            noninfected_graphs.append(nodeset)
-            #print(graph, 'nodeset len:', len(nodeset))
-    #we'll be keeping track of 'sparse chains', which are basically subsets of the
-    #graph that are linked lists (but able to be generalized to each node having
-    #more than 1 or 2 neighbors, in case we run out of the first kind)
-    sparse_chains = []
-    chainset = set()
-    min_neighbors = None
-    while len(updated_users) < target:
-        #find the node with the least connectivity
-        if not min_neighbors:
-            min_neighbors = random.choice(list(noninfected_graphs[0]))
-            for nodeset in noninfected_graphs:
-                for node in nodeset:
-                    if node.userID not in updated_users and len(node.neighbors()) <                       len(min_neighbors.students) + len(min_neighbors.mentors):
-                        min_neighbors = node
-        #find all nodes with the minimum connectivity
-        min_connectivity = len(min_neighbors.neighbors())
-        for nodeset in noninfected_graphs:
-            for node in nodeset:
-                if len(node.neighbors()) == min_connectivity:
-                    sparse_chains.append([node])
-                    chainset.add(node.userID)
-        updating_chains = True
-        while updating_chains:
-            updating_chains = False
-            for i in range(len(sparse_chains)):
-                chain = sparse_chains[i]
-                last_node = chain[-1]
-                #if this node has sufficiently few neighbors, add it to the chain
-                #(making sure it's not already in that chain)
-                if len(last_node.neighbors()) < min_connectivity + 1:
-                    for node in last_node.neighbors():
-                        if node.userID not in chainset:
-                            chain.append(node)
-                            chainset.add(node.userID)
-                            updating_chains = True
-        #so we have lots of chains, now we selectively update them
-        for chain in sparse_chains:
-            while chain:
-                node = chain.pop()
-                node.version = new_version
-                if node.userID in nonupdated_users:
-                    nonupdated_users.remove(node.userID)
-                updated_users.add(node.userID)
-                print('{} more to go'.format(target-len(updated_users)))
-                if len(updated_users) == target:
-                    renderGraph(node_positions)
-                    return
-            renderGraph(node_positions)
-        print('reached the end of chains with no more than {} neighbors'.format(min_connectivity))
-
-def limitedInfectionExactLocal(target, graphs, new_version=2.0, render=False):
+def limitedInfectionExact(target, graphs, new_version=2.0, render=False):
     '''
     In this algorithm, we'll take advantage of our particular knowledge of the graph: mentors will tend to have many students, but students don't tend to have many mentors. Since we are interested in not separating classrooms by version number, if we choose a random node and update their mentor and their mentor's students, we can get a classroom in a single sweep. If a student has multiple mentors simultaneously, their version might be updated before their peers.
+
+    target: the number of users to update
+    graphs: an array of tuples returned from getAllConnectedGraphs, of the form (arbitrary node inside the connected graph, number of nodes in that graph) and sorted by the second value from lowest to highest.
+    strict: if True, will raise an error if the exact number of nodes cannot be updated.
     '''
-    limitedInfection(target, graphs, allow_over=False, new_version=new_version, render=False)
-    if render:
-        node_positions = nx.spring_layout(G,dim=2,k=.1)
-        renderGraph(node_positions)
+    limitedInfection(target, graphs, new_version=new_version, render=render, allow_over=False)
+
+    if strict and update_count != target:
+        #TODO: find more specific error
+        raise Error("Can't update the exact number of nodes without cutting into graphs.")
+
+    #okay, we'll have to break apart a single graph now
     while len(updated_users) < target:
         #choose a random node and update all its neighbors. if we chose a student
         #node, then the mentor node will have lots of students. we should update
@@ -303,6 +253,7 @@ def limitedInfectionExactLocal(target, graphs, new_version=2.0, render=False):
                 return
             print('{} left'.format(target-len(updated_users)))
 
+
 def buildRandomGraph(total_users=100):
     '''
     Generate a set of graphs of size total_users.
@@ -320,7 +271,7 @@ def buildRandomGraph(total_users=100):
                     student = idToUser[studentID]
                     if student.isSingleton():
                         user.addStudent(student)
-            elif random.random() < 0.2: #the connectivity of the graph is very sensitive to how this threshold is defined
+            elif random.random() < 0.5: #the connectivity of the graph is very sensitive to how this threshold is defined
                 #poly-connected users
                 students = random.sample(nonupdated_users, random.randint(0, 3))
                 mentors = random.sample(nonupdated_users, random.randint(0, 3))
@@ -333,3 +284,31 @@ def buildRandomGraph(total_users=100):
             else:
                 #singleton
                 pass
+
+def reset():
+    global render_frame, maxUserID, G, nonupdated_users, updated_users, idToUser
+    render_frame = 0
+    maxUserID = 0
+    G = nx.Graph()
+    updated_users = set()
+    nonupdated_users = set()
+    idToUser = {}
+
+n_users = 500
+
+buildRandomGraph(n_users)
+print('graph generated.')
+
+graphs = getAllConnectedGraphs()
+print('got all connected graphs.')
+
+#total infection
+#user = graphs[-1][0] #choose a user from the largest connected graph
+#totalInfection(user)
+#print('infected: {}, uninfected: {}'.format(len(updated_users), len(nonupdated_users)))
+
+#limited infection
+limitedInfection(n_users-100, graphs, allow_over=False)
+
+#exact limited infection
+#limitedInfectionExactLocal(n_users-100, graphs, render=True)
