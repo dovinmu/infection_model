@@ -183,14 +183,12 @@ def limitedInfection(target, graphs, new_version=2.0, render=True, allow_over=Tr
     if render and not node_positions:
         node_positions = nx.spring_layout(G,dim=2,k=.1)
     #remove any networks that are larger than our target
-    while graphs[-1][1] > (target - len(updated_users)):
+    while graphs and graphs[-1][1] > (target - len(updated_users)):
         graphs.pop()
     #update the most-connected graphs until we can't fit anymore
-    while graphs[-1][1] < (target - len(updated_users)):
+    while graphs and graphs[-1][1] < (target - len(updated_users)):
         graph = graphs.pop()
         totalInfection(graph[0], render=render, node_positions=node_positions)
-        if render:
-            renderGraph(node_positions)
         print('infected: {}'.format(len(updated_users)))
     if len(updated_users) == target:
         return
@@ -212,7 +210,7 @@ def limitedInfection(target, graphs, new_version=2.0, render=True, allow_over=Tr
         #print('infected: {}, uninfected: {}'.format(len(updated_users), len(nonupdated_users)))
 
 
-def limitedInfectionExact(target, graphs, new_version=2.0, render=False):
+def limitedInfectionExact(target, graphs, new_version=2.0, render=False, strict=False):
     '''
     In this algorithm, we'll take advantage of our particular knowledge of the graph: mentors will tend to have many students, but students don't tend to have many mentors. Since we are interested in not separating classrooms by version number, if we choose a random node and update their mentor and their mentor's students, we can get a classroom in a single sweep. If a student has multiple mentors simultaneously, their version might be updated before their peers.
 
@@ -220,11 +218,14 @@ def limitedInfectionExact(target, graphs, new_version=2.0, render=False):
     graphs: an array of tuples returned from getAllConnectedGraphs, of the form (arbitrary node inside the connected graph, number of nodes in that graph) and sorted by the second value from lowest to highest.
     strict: if True, will raise an error if the exact number of nodes cannot be updated.
     '''
-    limitedInfection(target, graphs, new_version=new_version, render=render, allow_over=False)
+    if render:
+        node_positions = nx.spring_layout(G,dim=2,k=.1)
+
+    limitedInfection(target, graphs, new_version=new_version, render=render, allow_over=False, node_positions=node_positions)
 
     if strict and update_count != target:
-        #TODO: find more specific error
-        raise Error("Can't update the exact number of nodes without cutting into graphs.")
+        #TODO: find more specific exception
+        raise Exception("Can't update the exact number of nodes without cutting into graphs.")
 
     #okay, we'll have to break apart a single graph now
     while len(updated_users) < target:
@@ -254,7 +255,7 @@ def limitedInfectionExact(target, graphs, new_version=2.0, render=False):
             print('{} left'.format(target-len(updated_users)))
 
 
-def buildRandomGraph(total_users=100):
+def buildRandomGraph(total_users=100, connectivity=0.1, classrooms=0.1, require_singleton=True):
     '''
     Generate a set of graphs of size total_users.
     '''
@@ -263,15 +264,15 @@ def buildRandomGraph(total_users=100):
         user = User()
     for userID in nonupdated_users:
         user = idToUser[userID]
-        if user.isSingleton():
-            if random.random() < 0.1:
+        if not require_singleton or user.isSingleton():
+            if random.random() < classrooms:
                 #classroom users
                 students = random.sample(nonupdated_users, min(total_users, 20))
                 for studentID in students:
                     student = idToUser[studentID]
                     if student.isSingleton():
                         user.addStudent(student)
-            elif random.random() < 0.5: #the connectivity of the graph is very sensitive to how this threshold is defined
+            elif random.random() < connectivity: #the connectivity of the graph is very sensitive to how this threshold is defined
                 #poly-connected users
                 students = random.sample(nonupdated_users, random.randint(0, 3))
                 mentors = random.sample(nonupdated_users, random.randint(0, 3))
@@ -294,21 +295,42 @@ def reset():
     nonupdated_users = set()
     idToUser = {}
 
-n_users = 500
-
-buildRandomGraph(n_users)
-print('graph generated.')
-
-graphs = getAllConnectedGraphs()
-print('got all connected graphs.')
-
 #total infection
 #user = graphs[-1][0] #choose a user from the largest connected graph
 #totalInfection(user)
 #print('infected: {}, uninfected: {}'.format(len(updated_users), len(nonupdated_users)))
 
 #limited infection
-limitedInfection(n_users-100, graphs, allow_over=False)
+'''
+n_users = 250
 
+buildRandomGraph(n_users, 0.2)
+print('graph generated.')
+
+graphs = getAllConnectedGraphs()
+print('got all connected graphs.')
+
+limitedInfection(n_users-100, graphs, allow_over=False)
+'''
 #exact limited infection
-#limitedInfectionExactLocal(n_users-100, graphs, render=True)
+'''
+n_users = 250
+
+buildRandomGraph(n_users, 0.6)
+print('graph generated.')
+
+graphs = getAllConnectedGraphs()
+print('got all connected graphs.')
+
+limitedInfectionExact(n_users-50, graphs, render=True)
+'''
+#exact limited infection with one graph
+n_users = 250
+
+buildRandomGraph(n_users, connectivity=0.2, classrooms=0.2, require_singleton=False)
+print('graph generated.')
+
+graphs = getAllConnectedGraphs()
+print('got all connected graphs.')
+
+limitedInfectionExact(n_users-50, graphs, render=True)
