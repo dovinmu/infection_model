@@ -194,31 +194,11 @@ def limitedInfection(target, graphs, new_version=2.0, render=True, allow_over=Tr
     for user in to_update:
         totalInfection(user, node_positions=node_positions, render=render)
         #print('infected: {}, uninfected: {}'.format(len(updated_users), len(nonupdated_users)))
-    '''
-    Here is an example output from a sweep over these possible targets for a generated graph. One thing to notice is because of how the graph is distributed, beyond a certain point the error becomes pretty large, since the largest networks make up a significant percentage of the whole.
-    can update 10 users. target: 10
-    can update 20 users. target: 20
-    can update 30 users. target: 30
-    can update 40 users. target: 40
-    can update 50 users. target: 50
-    can update 63 users. target: 60
-    can update 63 users. target: 70
-    can update 63 users. target: 80
-    can update 63 users. target: 90
-    can update 63 users. target: 100
-    can update 63 users. target: 110
-    can update 63 users. target: 120
-    can update 63 users. target: 130
-    can update 200 users. target: 140
-    can update 200 users. target: 150
-    can update 200 users. target: 160
-    can update 200 users. target: 170
-    can update 200 users. target: 180
-    can update 200 users. target: 190
-    '''
 
 def limitedInfectionExact(target, graphs, new_version=2.0, render=True):
     '''
+    NOTE TO THE READER: this algorithm works, but it doens't work as well as it should and is being left in to be improved later. Also code is pretty janky.
+
     For an exact limited infection, we'll allow for some discontinuities in versions between students and mentors. But we still don't really like it, so we want to minimize this happening. We can measure this by how many edges exist at the end of the algorithm between nodes with different versions, and say that the goal of the algorithm is to minimize that number.
 
     A fully general and perfect solution would need to rely on graph partitioning, which is NP-hard. I think that's a problem for another day. Instead, let's try to get a decent approximation.
@@ -289,7 +269,7 @@ def limitedInfectionExact(target, graphs, new_version=2.0, render=True):
             renderGraph(node_positions)
         print('reached the end of chains with no more than {} neighbors'.format(min_connectivity))
 
-def limitedInfectionExactLocal(target, graphs, new_version=2.0, render=True):
+def limitedInfectionExactLocal(target, graphs, new_version=2.0, render=False):
     '''
     In this algorithm, we'll take advantage of our particular knowledge of the graph: mentors will tend to have many students, but students don't tend to have many mentors. Since we are interested in not separating classrooms by version number, if we choose a random node and update their mentor and their mentor's students, we can get a classroom in a single sweep. If a student has multiple mentors simultaneously, their version might be updated before their peers.
     '''
@@ -325,12 +305,7 @@ def limitedInfectionExactLocal(target, graphs, new_version=2.0, render=True):
 
 def buildRandomGraph(total_users=100):
     '''
-    There are a number of types of site users we're going to model:
-    1) classrooms
-    2) singletons
-    3) poly-connected users (could have any number of mentors / students, or both)
-
-    This code tends to generate many unconnected users, a number of very small graphs, and several small-world networks. This should reflect reality enough for our purposes. We'll only ever run this method before an update, so we can consider the set nonupdated_users as the set of all users.
+    Generate a set of graphs of size total_users.
     '''
     global nonupdated_users, idToUser
     for i in range(total_users):
@@ -340,7 +315,7 @@ def buildRandomGraph(total_users=100):
         if user.isSingleton():
             if random.random() < 0.1:
                 #classroom users
-                students = random.sample(nonupdated_users, 20)
+                students = random.sample(nonupdated_users, min(total_users, 20))
                 for studentID in students:
                     student = idToUser[studentID]
                     if student.isSingleton():
@@ -358,22 +333,3 @@ def buildRandomGraph(total_users=100):
             else:
                 #singleton
                 pass
-
-n_users = 500
-
-buildRandomGraph(n_users)
-print('graph generated.')
-
-graphs = getAllConnectedGraphs()
-print('got all connected graphs.')
-
-#total infection
-#user = graphs[-1][0] #choose a user from the largest connected graph
-#totalInfection(user)
-#print('infected: {}, uninfected: {}'.format(len(updated_users), len(nonupdated_users)))
-
-#limited infection
-#limitedInfection(n_users-1, graphs, allow_over=False)
-
-#exact limited infection
-limitedInfectionExactLocal(n_users-100, graphs)
