@@ -39,7 +39,23 @@ def runLimitedInfectionExact(render=False):
     limitedInfectionExact(target, graphs, state, render=render)
     print('infected: {}, target: {}\n'.format(len(state.updated_users), target))
 
+def runLimitedInfectionExactBreak(render=False):
+    #attempts to break the exact algorithm
+    n_users = 250
+    target = 251
+    print('\t Exact Limited Infection (incorrect input)\nnodes: {} target: {}.'.format(n_users, target))
+    state = State()
+    buildRandomGraph(state, n_users, 0.6, require_singleton=False)
+    print('graph generated.')
+    graphs = getAllConnectedGraphs(state)
+    print('got all connected graphs.')
+    limitedInfectionExact(target, graphs, state, render=render)
+    print('infected: {}, target: {}\n'.format(len(state.updated_users), target))
+
+
 if __name__ == "__main__":
     runTotalInfection()
     runLimitedInfection()
     runLimitedInfectionExact()
+    print('break:')
+    runLimitedInfectionExactBreak()

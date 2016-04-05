@@ -204,24 +204,24 @@ def limitedInfection(target, graphs, state, new_version=2.0, render=True, allow_
     for user in to_update:
         totalInfection(user, state, node_positions=node_positions, render=render)
 
-def limitedInfectionExact(target, graphs, state, new_version=2.0, render=False, strict=False):
+def limitedInfectionExact(target, graphs, state, new_version=2.0, render=False):
     '''
     In this algorithm, we'll take advantage of our particular knowledge of the graph: mentors will tend to have many students, but students don't tend to have many mentors. Since we are interested in not separating classrooms by version number, if we choose a random node and update their mentor and their mentor's students, we can get a classroom in a single sweep. If a student has multiple mentors simultaneously, their version might be updated before their peers.
 
     target: the number of users to update
     graphs: an array of tuples returned from getAllConnectedGraphs, of the form (arbitrary node inside the connected graph, number of nodes in that graph) and sorted by the second value from lowest to highest.
-    strict: if True, will raise an error if the exact number of nodes cannot be updated.
     '''
     if render:
         node_positions = nx.spring_layout(state.G,dim=2,k=.1)
     else:
         node_positions = None
 
+    if target > len(state.nonupdated_users):
+            print("FAIL: Not enough nodes left to update. Target: {} nodes: {}".format(target, len(state.nonupdated_users)))
+            return
+
     limitedInfection(target, graphs, state, new_version=new_version, render=render, allow_over=False, node_positions=node_positions)
 
-    if strict and update_count != target:
-        #TODO: find more specific exception
-        raise Exception("Can't update the exact number of nodes without cutting into graphs.")
     print("Updating parts of a graph.")
     #okay, we'll have to break apart a single graph now
     while len(state.updated_users) < target:
