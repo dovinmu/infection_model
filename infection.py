@@ -20,46 +20,48 @@ import time
 import networkx as nx
 import matplotlib.pyplot as plt
 
-#for animating the update functions
-render_frame = 0
 
-maxUserID = 0
-def getUserID():
-    global maxUserID
-    maxUserID += 1
-    return maxUserID
+class State():
+    def __init__(self):
+        #for animating the update functions
+        self.render_frame = 0
 
-#keep a graph representation for visualization
-G = nx.Graph()
-#sets that store the userID of users who have and have not been updated
-updated_users = set()
-nonupdated_users = set()
-idToUser = {}
+        self.maxUserID = 0
+        #keep a graph representation for visualization
+        self.G = nx.Graph()
+        #sets that store the userID of users who have and have not been updated
+        self.updated_users = set()
+        self.nonupdated_users = set()
+        self.idToUser = {}
+
+    def getUserID(self):
+        self.maxUserID += 1
+        return self.maxUserID
+
 
 class User():
-    def __init__(self, userID=None):
-        global nonupdated_users, idToUser
+    def __init__(self, state, userID=None):
         if userID:
             self.userID = userID
         else:
-            self.userID = getUserID()
-        nonupdated_users.add(self.userID)
-        idToUser[self.userID] = self
-        G.add_node(self.userID)
+            self.userID = state.getUserID()
+        state.nonupdated_users.add(self.userID)
+        state.idToUser[self.userID] = self
+        state.G.add_node(self.userID)
 
         self.mentors = {}
         self.students = {}
         self.version = 1.0
 
-    def addStudent(self, student):
+    def addStudent(self, student, state):
         self.students[student.userID] = student
         student.mentors[self.userID] = self
-        G.add_edge(self.userID, student.userID)
+        state.G.add_edge(self.userID, student.userID)
 
     def removeStudent(self, student):
         del self.students[student.userID]
         del student.mentors[self.userID]
-        G.remove_edge(self.userID, student.userID)
+        state.G.remove_edge(self.userID, student.userID)
 
     def neighbors(self):
         return list(self.students.values()) + list(self.mentors.values())
@@ -71,27 +73,23 @@ class User():
         return self.__repr__()
 
     def __repr__(self):
-        #return "mentorIDs: " + ', '.join([str(ID) for ID in self.mentors.keys()]) + '\n' + "studentIDs: " + ', '.join([str(ID) for ID in self.students.keys()])
         return 'userID: {}'.format(self.userID)
 
-def renderGraph(position):
-    global render_frame, nonupdated_users, updated_users, G
+def renderGraph(position, state):
     plt.figure(figsize=(20,20))
     #nodes
-    nx.draw_networkx_nodes(G,position,node_color='b',nodelist=nonupdated_users)
-    nx.draw_networkx_nodes(G,position,nodelist=updated_users)
+    nx.draw_networkx_nodes(state.G, position, node_color='b', nodelist=state.nonupdated_users)
+    nx.draw_networkx_nodes(state.G, position,nodelist=state.updated_users)
     # edges
-    nx.draw_networkx_edges(G,position,width=1)
-    # labels
-    #nx.draw_networkx_labels(G,pos,font_size=20,font_family='sans-serif')
+    nx.draw_networkx_edges(state.G, position,width=1)
 
     plt.xlim(-1.1,1.1)
     plt.ylim(-1.1,1.1)
     plt.axis('off')
-    plt.savefig('graph_frame{}.png'.format(render_frame), dpi=50)
+    plt.savefig('graph_frame{}.png'.format(state.render_frame), dpi=50)
     plt.close()
-    print('rendered frame {}'.format(render_frame))
-    render_frame += 1
+    print('rendered frame {}'.format(state.render_frame))
+    state.render_frame += 1
 
 def getConnectedGraph(user):
     '''
@@ -109,16 +107,16 @@ def getConnectedGraph(user):
         leaves = new_leaves
     return result
 
-def getAllConnectedGraphs():
+def getAllConnectedGraphs(state):
     '''
     Get a set of all connected graphs as a list of tuples of the form (arbitrary node inside the connected graph, number of nodes in that graph).
     '''
     result = []
 
-    unvisited = updated_users.union(nonupdated_users)
+    unvisited = state.updated_users.union(state.nonupdated_users)
     while unvisited:
         userID = random.choice(list(unvisited))
-        user = idToUser[userID]
+        user = state.idToUser[userID]
         graph_size = 0
 
         visited = set()
@@ -133,8 +131,6 @@ def getAllConnectedGraphs():
                 new_leaves += [user for user in leaf.mentors.values() if user.userID in unvisited]
             leaves = new_leaves
         result.append((user, graph_size))
-        #print((user.userID, graph_size))
-        #time.sleep(1)
     result.sort(key=lambda tup: tup[1])
     return result
 
@@ -143,35 +139,35 @@ def getAllConnectedGraphs():
         Total Infection
 '''
 
-def totalInfection(patientZero, new_version=2.0, render=True, node_positions=None):
+def totalInfection(patientZero, state, new_version=2.0, render=True, node_positions=None):
     '''
     Starting from any given user, the entire connected component of the coaching graph containing that user should become infected.
     '''
     #get graph ready to render
     if render and not node_positions:
-        node_positions = nx.spring_layout(G,dim=2,k=.1)
+        node_positions = nx.spring_layout(state.G,dim=2,k=.1)
 
     leaves = [patientZero]
     while leaves:
         new_leaves = []
         for leaf in leaves:
             leaf.version = new_version
-            updated_users.add(leaf.userID)
-            if leaf.userID in nonupdated_users:
-                nonupdated_users.remove(leaf.userID)
+            state.updated_users.add(leaf.userID)
+            if leaf.userID in state.nonupdated_users:
+                state.nonupdated_users.remove(leaf.userID)
                 #print('updated {}'.format(leaf.userID))
             new_leaves += [user for user in leaf.students.values() if user.version < new_version]
             new_leaves += [user for user in leaf.mentors.values() if user.version < new_version]
         leaves = new_leaves
         if render:
-            renderGraph(node_positions)
+            renderGraph(node_positions, state)
 
 
 '''
                 Limited Infection
 '''
 
-def limitedInfection(target, graphs, new_version=2.0, render=True, allow_over=True, node_positions=None):
+def limitedInfection(target, graphs, state, new_version=2.0, render=True, allow_over=True, node_positions=None):
     '''
     Update a number of users as close as possible to the target without breaking connected graphs into updated / not updated.
 
@@ -181,21 +177,21 @@ def limitedInfection(target, graphs, new_version=2.0, render=True, allow_over=Tr
     node_positions: physical layout of the nodes for rendering
     '''
     if render and not node_positions:
-        node_positions = nx.spring_layout(G,dim=2,k=.1)
+        node_positions = nx.spring_layout(state.G,dim=2,k=.1)
     #remove any networks that are larger than our target
-    while graphs and graphs[-1][1] > (target - len(updated_users)):
+    while graphs and graphs[-1][1] > (target - len(state.updated_users)):
         graphs.pop()
     #update the most-connected graphs until we can't fit anymore
-    while graphs and graphs[-1][1] < (target - len(updated_users)):
+    while graphs and graphs[-1][1] < (target - len(state.updated_users)):
         graph = graphs.pop()
-        totalInfection(graph[0], render=render, node_positions=node_positions)
-        print('infected: {}'.format(len(updated_users)))
-    if len(updated_users) == target:
+        totalInfection(graph[0], state, render=render, node_positions=node_positions)
+        print('infected graph of size: {}'.format(graph[1]))
+    if len(state.updated_users) == target:
         return
     #then try updating the least-connected graphs until we finish or can't fit anymore
     to_update = []
     update_count = 0
-    target = target-len(updated_users)
+    target = target-len(state.updated_users)
     for graph in graphs:
         if update_count + graph[1] > target:
             if allow_over and abs(target - update_count - graph[1]) < abs(target - update_count):
@@ -204,13 +200,11 @@ def limitedInfection(target, graphs, new_version=2.0, render=True, allow_over=Tr
             break
         update_count += graph[1]
         to_update.append(graph[0])
-    print('can update {} users. target: {}'.format(update_count, target))
+    print('can update {} users from least-connected graphs. target: {}'.format(update_count, target))
     for user in to_update:
-        totalInfection(user, node_positions=node_positions, render=render)
-        #print('infected: {}, uninfected: {}'.format(len(updated_users), len(nonupdated_users)))
+        totalInfection(user, state, node_positions=node_positions, render=render)
 
-
-def limitedInfectionExact(target, graphs, new_version=2.0, render=False, strict=False):
+def limitedInfectionExact(target, graphs, state, new_version=2.0, render=False, strict=False):
     '''
     In this algorithm, we'll take advantage of our particular knowledge of the graph: mentors will tend to have many students, but students don't tend to have many mentors. Since we are interested in not separating classrooms by version number, if we choose a random node and update their mentor and their mentor's students, we can get a classroom in a single sweep. If a student has multiple mentors simultaneously, their version might be updated before their peers.
 
@@ -219,118 +213,69 @@ def limitedInfectionExact(target, graphs, new_version=2.0, render=False, strict=
     strict: if True, will raise an error if the exact number of nodes cannot be updated.
     '''
     if render:
-        node_positions = nx.spring_layout(G,dim=2,k=.1)
+        node_positions = nx.spring_layout(state.G,dim=2,k=.1)
+    else:
+        node_positions = None
 
-    limitedInfection(target, graphs, new_version=new_version, render=render, allow_over=False, node_positions=node_positions)
+    limitedInfection(target, graphs, state, new_version=new_version, render=render, allow_over=False, node_positions=node_positions)
 
     if strict and update_count != target:
         #TODO: find more specific exception
         raise Exception("Can't update the exact number of nodes without cutting into graphs.")
-
+    print("Updating parts of a graph.")
     #okay, we'll have to break apart a single graph now
-    while len(updated_users) < target:
+    while len(state.updated_users) < target:
         #choose a random node and update all its neighbors. if we chose a student
         #node, then the mentor node will have lots of students. we should update
         #these all at once.
-        userID = random.choice(list(nonupdated_users))
-        user = idToUser[userID]
+        userID = random.choice(list(state.nonupdated_users))
+        user = state.idToUser[userID]
         for mentor in user.mentors.values():
             for student in mentor.students.values():
-                if student.userID in nonupdated_users:
-                    nonupdated_users.remove(student.userID)
-                updated_users.add(student.userID)
+                if student.userID in state.nonupdated_users:
+                    state.nonupdated_users.remove(student.userID)
+                state.updated_users.add(student.userID)
                 student.version = new_version
-                if len(updated_users) == target:
+                if len(state.updated_users) == target:
                     if render:
-                        renderGraph(node_positions)
+                        renderGraph(node_positions, state)
                     return
-            if mentor.userID in nonupdated_users:
-                nonupdated_users.remove(mentor.userID)
-            updated_users.add(mentor.userID)
+            if mentor.userID in state.nonupdated_users:
+                state.nonupdated_users.remove(mentor.userID)
+            state.updated_users.add(mentor.userID)
             mentor.version = new_version
             if render:
-                renderGraph(node_positions)
-            if len(updated_users) == target:
+                renderGraph(node_positions, state)
+            if len(state.updated_users) == target:
                 return
-            print('{} left'.format(target-len(updated_users)))
 
 
-def buildRandomGraph(total_users=100, connectivity=0.1, classrooms=0.1, require_singleton=True):
+def buildRandomGraph(state, total_users=100, connectivity=0.1, classrooms=0.1, require_singleton=True):
     '''
     Generate a set of graphs of size total_users.
     '''
-    global nonupdated_users, idToUser
     for i in range(total_users):
-        user = User()
-    for userID in nonupdated_users:
-        user = idToUser[userID]
+        user = User(state)
+    for userID in state.nonupdated_users:
+        user = state.idToUser[userID]
         if not require_singleton or user.isSingleton():
             if random.random() < classrooms:
                 #classroom users
-                students = random.sample(nonupdated_users, min(total_users, 20))
+                students = random.sample(state.nonupdated_users, min(total_users, 20))
                 for studentID in students:
-                    student = idToUser[studentID]
+                    student = state.idToUser[studentID]
                     if student.isSingleton():
-                        user.addStudent(student)
+                        user.addStudent(student, state)
             elif random.random() < connectivity: #the connectivity of the graph is very sensitive to how this threshold is defined
                 #poly-connected users
-                students = random.sample(nonupdated_users, random.randint(0, 3))
-                mentors = random.sample(nonupdated_users, random.randint(0, 3))
+                students = random.sample(state.nonupdated_users, random.randint(0, 3))
+                mentors = random.sample(state.nonupdated_users, random.randint(0, 3))
                 for studentID in students:
-                    student = idToUser[studentID]
-                    user.addStudent(student)
+                    student = state.idToUser[studentID]
+                    user.addStudent(student, state)
                 for mentorID in mentors:
-                    mentor = idToUser[mentorID]
-                    mentor.addStudent(user)
+                    mentor = state.idToUser[mentorID]
+                    mentor.addStudent(user, state)
             else:
                 #singleton
                 pass
-
-def reset():
-    global render_frame, maxUserID, G, nonupdated_users, updated_users, idToUser
-    render_frame = 0
-    maxUserID = 0
-    G = nx.Graph()
-    updated_users = set()
-    nonupdated_users = set()
-    idToUser = {}
-
-#total infection
-#user = graphs[-1][0] #choose a user from the largest connected graph
-#totalInfection(user)
-#print('infected: {}, uninfected: {}'.format(len(updated_users), len(nonupdated_users)))
-
-#limited infection
-'''
-n_users = 250
-
-buildRandomGraph(n_users, 0.2)
-print('graph generated.')
-
-graphs = getAllConnectedGraphs()
-print('got all connected graphs.')
-
-limitedInfection(n_users-100, graphs, allow_over=False)
-'''
-#exact limited infection
-'''
-n_users = 250
-
-buildRandomGraph(n_users, 0.6)
-print('graph generated.')
-
-graphs = getAllConnectedGraphs()
-print('got all connected graphs.')
-
-limitedInfectionExact(n_users-50, graphs, render=True)
-'''
-#exact limited infection with one graph
-n_users = 250
-
-buildRandomGraph(n_users, connectivity=0.2, classrooms=0.2, require_singleton=False)
-print('graph generated.')
-
-graphs = getAllConnectedGraphs()
-print('got all connected graphs.')
-
-limitedInfectionExact(n_users-50, graphs, render=True)
