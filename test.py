@@ -43,7 +43,7 @@ def runLimitedInfectionExactBreak(render=False):
     #attempts to break the exact algorithm
     n_users = 250
     target = 251
-    print('\t Exact Limited Infection (incorrect input)\nnodes: {} target: {}.'.format(n_users, target))
+    print('\t Exact Limited Infection (with incorrect input)\nnodes: {} target: {}.'.format(n_users, target))
     state = State()
     buildRandomGraph(state, n_users, 0.6, require_singleton=False)
     print('graph generated.')
@@ -57,5 +57,5 @@ if __name__ == "__main__":
     runTotalInfection()
     runLimitedInfection()
     runLimitedInfectionExact()
-    print('break:')
+    print('\nFailure condition:')
     runLimitedInfectionExactBreak()
